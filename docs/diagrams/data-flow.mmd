@@ -1,0 +1,34 @@
+flowchart TD
+    title Data Flow Diagram: Движение данных и хранение
+
+    User([Пользователь]) -->|Текстовый запрос| Gateway[API Gateway]
+    Gateway -->|Сырой текст + Meta| Graph[Agent Graph]
+
+    subgraph Memory Storage
+        Redis[(Redis: Session State)]
+        VDB[(Vector DB: Preferences)]
+    end
+
+    Graph <-->|ID сессии -> Чтение/Запись истории| Redis
+    Graph -->|Векторизация запроса| VDB
+    VDB -->|Top-K привычек| Graph
+
+    subgraph External
+        LLM[LLM API]
+        Cal[Calendar API]
+    end
+
+    Graph -->|Собранный промпт\n(User + History + RAG)| LLM
+    LLM -->|Tool Arguments / JSON| Graph
+    
+    Graph -->|Валидированные аргументы| Cal
+    Cal -->|Свободные слоты / Статусы| Graph
+
+    subgraph Observability
+        Logger[Telemetry / Logs]
+    end
+
+    Graph -.->|Токены, Latency, Ошибки| Logger
+    Gateway -.->|Request/Response| Logger
+
+    Graph -->|Финальный текст + Ссылки| User
