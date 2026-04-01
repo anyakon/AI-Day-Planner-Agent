@@ -1,0 +1,16 @@
+C4Container
+    title C4 Container: Архитектура PoC системы
+
+    Container(gateway, "API Gateway / Bot", "FastAPI / Aiogram", "Прием запросов, Rate limits, Auth")
+    Container(orchestrator, "Agent Orchestrator", "Python, LangGraph", "Ядро: управление графом состояний")
+    Container(tools_engine, "Tool Engine", "Python", "Изолированный запуск API-интеграций (Calendar, Weather)")
+    
+    ContainerDb(redis, "Session Cache", "Redis", "Краткосрочная память, стейт графа (Checkpointer)")
+    ContainerDb(vector_db, "Memory DB", "ChromaDB / Postgres", "Долгосрочные предпочтения (RAG)")
+    Container(observability, "Observability", "Prometheus / LangSmith", "Сбор метрик и трейсов")
+
+    Rel(gateway, orchestrator, "Инициирует сессию планирования")
+    Rel(orchestrator, redis, "Чтение/сохранение промежуточного состояния")
+    Rel(orchestrator, vector_db, "Поиск контекста (привычки, правила)")
+    Rel(orchestrator, tools_engine, "Запрос на вызов функции (Tool call)")
+    Rel(orchestrator, observability, "Асинхронная отправка трейсов")
