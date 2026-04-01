@@ -1,0 +1,20 @@
+C4Component
+    title C4 Component: Внутреннее устройство Agent Orchestrator
+
+    Container_Boundary(orchestrator, "Agent Orchestrator") {
+        Component(graph, "State Graph", "LangGraph", "Маршрутизация узлов: LLM -> Tools -> Валидатор")
+        Component(llm_gateway, "LLM Gateway", "LangChain", "Абстракция над моделями, Circuit Breaker, Fallbacks")
+        Component(memory_mgr, "Memory Manager", "Python", "Контроль Context Budget (токены), суммаризация")
+        Component(prompt_builder, "Context Builder", "Python", "Инъекция даты, времени, правил из RAG")
+        Component(validator, "Guardrail Validator", "Pydantic", "Проверка логики расписания (пересечения времени)")
+    }
+
+    ComponentDb(redis, "Redis", "Стейт")
+    ComponentDb(llm, "External LLM", "API")
+
+    Rel(graph, llm_gateway, "Отправляет сгенерированный контекст")
+    Rel(llm_gateway, llm, "API Call")
+    Rel(graph, memory_mgr, "Запрашивает историю")
+    Rel(memory_mgr, redis, "Загружает сообщения")
+    Rel(graph, prompt_builder, "Сборка системного промпта")
+    Rel(graph, validator, "Валидация перед финальным ответом")
