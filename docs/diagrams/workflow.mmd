@@ -1,0 +1,21 @@
+stateDiagram-v2
+    title Workflow выполнения запроса (Agentic State Graph)
+    
+    [*] --> Receive_Request
+    Receive_Request --> Load_Context: Извлечение UserID
+    Load_Context --> Prompt_Enrichment: Добавление времени и RAG
+    Prompt_Enrichment --> LLM_Reasoning
+    
+    LLM_Reasoning --> Tool_Call: Агент решил использовать API
+    LLM_Reasoning --> Validation_Guardrail: Агент составил план
+    
+    Tool_Call --> Execute_Tool
+    Execute_Tool --> LLM_Reasoning: Возврат данных (Success)
+    Execute_Tool --> Fallback_Error: Ошибка API (Timeout/Limits)
+    
+    Fallback_Error --> LLM_Reasoning: Текст ошибки в контекст (Self-Correction)
+    
+    Validation_Guardrail --> Final_Answer: План валиден (нет накладок)
+    Validation_Guardrail --> LLM_Reasoning: Найдена алгоритмическая ошибка времени
+    
+    Final_Answer --> [*]: Отправка пользователю
