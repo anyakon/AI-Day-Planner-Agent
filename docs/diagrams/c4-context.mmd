@@ -1,0 +1,14 @@
+C4Context
+    title C4 Context: AI Day Planner System
+
+    Person(user, "User", "Владелец расписания")
+    System(planner, "AI Day Planner", "Агент планирования дня")
+    
+    System_Ext(llm, "LLM Provider", "OpenAI / Anthropic (Генерация, логика)")
+    System_Ext(calendar, "Google Calendar", "Чтение/запись событий пользователя")
+    System_Ext(weather, "Weather API", "Прогноз погоды (опционально)")
+
+    Rel(user, planner, "Отправляет запросы текстом/голосом", "Telegram / Web")
+    Rel(planner, llm, "Промпты, вызов тулов", "REST API")
+    Rel(planner, calendar, "Чтение слотов, запись событий", "OAuth2 / REST")
+    Rel(planner, weather, "Запрос прогноза по локации", "REST")
