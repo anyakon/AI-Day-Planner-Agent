@@ -1,16 +1,22 @@
 C4Container
-    title C4 Container: Архитектура PoC системы
+    title C4 Container: Архитектура AI Day Planner Agent
 
-    Container(gateway, "API Gateway / Bot", "FastAPI / Aiogram", "Прием запросов, Rate limits, Auth")
-    Container(orchestrator, "Agent Orchestrator", "Python, LangGraph", "Ядро: управление графом состояний")
-    Container(tools_engine, "Tool Engine", "Python", "Изолированный запуск API-интеграций (Calendar, Weather)")
-    
-    ContainerDb(redis, "Session Cache", "Redis", "Краткосрочная память, стейт графа (Checkpointer)")
-    ContainerDb(vector_db, "Memory DB", "ChromaDB / Postgres", "Долгосрочные предпочтения (RAG)")
-    Container(observability, "Observability", "Prometheus / LangSmith", "Сбор метрик и трейсов")
+    Container(server, "FastAPI Server", "Python, FastAPI", "REST API, Prometheus /metrics")
+    Container(nlp, "NLP Parser", "Python, LLM", "Распознавание задач из текста, suggested_start")
+    Container(agent, "Agent Core", "Python, LangGraph", "ReAct цикл, управление графом состояний")
+    Container(tools, "Tool Layer", "Python", "Вызов Google Calendar API, валидация, rate limiting")
+    Container(guard, "Guardrails", "Python, Pydantic", "Injection detection, PII anonymization, output safety")
 
-    Rel(gateway, orchestrator, "Инициирует сессию планирования")
-    Rel(orchestrator, redis, "Чтение/сохранение промежуточного состояния")
-    Rel(orchestrator, vector_db, "Поиск контекста (привычки, правила)")
-    Rel(orchestrator, tools_engine, "Запрос на вызов функции (Tool call)")
-    Rel(orchestrator, observability, "Асинхронная отправка трейсов")
+    ContainerDb(metrics, "Metrics Store", "JSON file (metrics.json)", "Метрики: latency p50/p95, TTFT, TPOT, tokens, cost")
+    ContainerDb(memory, "Preferences", "JSON file (memory.json)", "Сохранённые предпочтения пользователя")
+    Container(observability, "Langfuse Cloud", "https://us.cloud.langfuse.com", "Трейсинг вызовов LLM")
+
+    Rel(server, nlp, "POST /api/chat -> extract_tasks")
+    Rel(server, agent, "POST /api/plan -> run_agent()")
+    Rel(nlp, agent, "Структурированные задачи")
+    Rel(agent, tools, "Вызов инструментов через LangGraph")
+    Rel(agent, guard, "Guardrail check перед планированием")
+    Rel(agent, metrics, "Запись метрик после запуска")
+    Rel(agent, memory, "Чтение/запись предпочтений")
+    Rel(agent, observability, "Отправка трейсов")
+    Rel(tools, observability, "Логирование вызовов")

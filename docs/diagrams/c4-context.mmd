@@ -1,14 +1,18 @@
 C4Context
-    title C4 Context: AI Day Planner System
+    title C4 Context: AI Day Planner Agent
 
-    Person(user, "User", "Владелец расписания")
-    System(planner, "AI Day Planner", "Агент планирования дня")
-    
-    System_Ext(llm, "LLM Provider", "OpenAI / Anthropic (Генерация, логика)")
-    System_Ext(calendar, "Google Calendar", "Чтение/запись событий пользователя")
-    System_Ext(weather, "Weather API", "Прогноз погоды (опционально)")
+    Person(user, "Пользователь", "Владелец расписания и задач")
+    System(planner, "AI Day Planner Agent", "Автоматическое планирование задач из текста и структуры")
 
-    Rel(user, planner, "Отправляет запросы текстом/голосом", "Telegram / Web")
-    Rel(planner, llm, "Промпты, вызов тулов", "REST API")
-    Rel(planner, calendar, "Чтение слотов, запись событий", "OAuth2 / REST")
-    Rel(planner, weather, "Запрос прогноза по локации", "REST")
+    System_Ext(llm, "LLM Provider", "LiteLLM прокси (OpenAI gpt-4o)")
+    System_Ext(calendar, "Google Calendar", "Чтение/запись событий через OAuth2")
+    System_Ext(langfuse, "Langfuse Cloud", "Трейсинг вызовов LLM")
+    System_Ext(prometheus, "Prometheus", "Сбор метрик (scrape /metrics)")
+    System_Ext(grafana, "Grafana", "Визуализация метрик и дашборды")
+
+    Rel(user, planner, "Текст или JSON через REST API", "HTTP")
+    Rel(planner, llm, "NLP парсинг + Function calling", "REST API")
+    Rel(planner, calendar, "Чтение событий, создание записей", "OAuth2 / REST")
+    Rel(planner, langfuse, "Трейсы вызовов LLM", "REST API")
+    Rel(prometheus, planner, "Scrape /metrics каждые 10с", "HTTP")
+    Rel(grafana, prometheus, "Запрос метрик", "HTTP")

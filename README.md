@@ -1,103 +1,211 @@
 # AI Day Planner Agent
 
-## Описание проекта
+Автоматическое планирование задач с учётом календаря, дедлайнов и занятых слотов. Принимает запросы на естественном языке.
 
-AI Day Planner Agent — это агентная система, которая помогает пользователю автоматически планировать день на основе задач, календаря, приоритетов и доступного времени.
+## Цель
 
-Агент анализирует список задач, события календаря, дедлайны и предпочтения пользователя, после чего формирует оптимальное расписание дня. Система может перестраивать план при изменении обстоятельств (новые задачи, перенос встреч, нехватка времени).
+Агент для автоматического планирования задач в календаре пользователя. Принимает текстовый запрос (например "Завтра утром теннис, после обеда код-ревью"), распознаёт задачи, проверяет занятые слоты, составляет расписание без пересечений и создаёт события.
 
-Проект реализуется как Proof-of-Concept агентной системы с использованием LLM, инструментов и внешних интеграций.
+**Метрики успеха:**
+- task_placement_rate >= 90% задач размещено
+- success_rate >= 90% успешных запусков
+- avg_plan_quality >= 0.7 по шкале evals
+- response_time < 60 секунд (текстовый запрос)
 
----
+## Операционные ограничения
 
-## Проблема
+- События нельзя создавать в прошлом
+- События нельзя создавать без предварительной валидации
+- Rate limit: 10 вызовов инструментов в минуту
+- Максимум 25 итераций ReAct-цикла
+- Запрет на ночное время (00:00-07:00)
 
-Многие люди сталкиваются с трудностями в планировании дня:
+## Быстрый старт
 
-- задачи распределяются неэффективно
-- люди недооценивают время выполнения
-- появляются конфликты в расписании
-- задачи забываются
-- при изменении планов приходится перестраивать расписание вручную
+```bash
+pip install -r requirements.txt
+python server.py
+```
 
-Существующие инструменты (календарь, таск-менеджеры) требуют ручного управления и не помогают оптимизировать день автоматически.
+Откройте http://localhost:8000
 
----
+## Способы взаимодействия
 
-## Для кого проект
+### 1. Текстовый запрос (NLP)
 
-- студенты
-- разработчики
-- менеджеры
-- фрилансеры
-- люди с большим количеством задач
+```bash
+curl -X POST http://localhost:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"Завтра утром теннис, после обеда код-ревью, вечером ретро"}'
+```
 
----
+Агент распознаёт задачи из текста, определяет предпочтительное время и размещает в календаре.
 
-## Что делает PoC на демо
+### 2. Структурированный запрос
 
-На демо агент сможет:
+```bash
+curl -X POST http://localhost:8000/api/plan \
+  -H "Content-Type: application/json" \
+  -d '{"tasks":[{"name":"Теннис","duration":60,"deadline":"23:59"}]}'
+```
 
-1. Получать список задач пользователя
-2. Получать данные календаря
-3. Оценивать длительность задач
-4. Приоритизировать задачи
-5. Генерировать расписание дня
-6. Перестраивать расписание при изменении условий
-7. Объяснять свои решения
+### 3. Проверка статуса
 
-Пример сценария:
+```bash
+curl http://localhost:8000/
+```
 
-Пользователь вводит:
+Вернёт статус и список доступных endpoint'ов.
 
-- задачи
-- дедлайны
-- доступное время
+## Архитектура
 
-Агент:
+```
+Текст пользователя
+       │
+       ▼
+┌──────────────┐
+│ NLP Parser   │  LLM: извлекает задачи с suggested_start
+│ nlp_parser.py│
+└──────┬───────┘
+       ▼
+┌──────────────┐
+│ Guardrails   │  Pydantic + injection check + PII anonymization
+│ guardrails.py│
+└──────┬───────┘
+       ▼
+┌──────────────┐
+│ Agent (ReAct)│  LangGraph: think → execute → ... → END
+│ planner.py   │  5 инструментов + suggested_start
+└──────┬───────┘
+       ▼
+┌──────────────┐
+│ Calendar     │  Google Calendar API
+│ + Metrics    │  Prometheus + Langfuse
+└──────────────┘
+```
 
-1. анализирует данные
-2. оптимизирует план
-3. формирует расписание
+## Компоненты
 
-Результат:
-09:00–10:00 — подготовка отчета
-10:00–11:00 — встреча с командой
-11:30–13:00 — работа над проектом
-14:00–15:00 — обучение
+| Файл | Назначение |
+|---|---|
+| `planner.py` | Агент: ReAct цикл, 5 инструментов, LangGraph |
+| `nlp_parser.py` | Распознавание задач из текста (LLM + suggested_start) |
+| `config.py` | Продуктовая конфигурация |
+| `security.py` | Анонимизация PII, валидация, RateLimiter |
+| `guardrails.py` | Prompt injection detection, Pydantic, output safety |
+| `evals.py` | Оценка качества: placement, overlaps, deadlines, efficiency |
+| `monitoring.py` | Метрики (p50/p95, TTFT, TPOT, tokens, cost), Prometheus, Langfuse |
+| `server.py` | FastAPI API + Prometheus endpoint |
 
+## NLP: Распознавание задач из текста
 
----
+| Фраза | Распознанная задача |
+|---|---|
+| "Завтра утром теннис" | name=Теннис, duration=60, suggested_start=09:00, preferred_time=утро |
+| "После обеда код-ревью" | name=Код-ревью, duration=45, suggested_start=14:00, preferred_time=день |
+| "Вечером ретро" | name=Ретро, duration=60, suggested_start=18:00, preferred_time=вечер |
 
-## Что НЕ делает PoC
+Временные окна: утро=09:00-12:00, день=13:00-17:00, вечер=18:00-21:00
 
-Out of scope:
+## Guardrails
 
-- автоматическое создание задач
-- интеграция с большим количеством сервисов
-- полноценный календарный сервис
-- долгосрочное планирование (недели/месяцы)
-- сложная персонализация на основе длительной истории
+| Тип | Механизм | Где |
+|---|---|---|
+| Prompt injection | 10 regex паттернов + Pydantic | `guardrails.py` |
+| Input validation | Pydantic: name max 200, duration > 0 <= 1440, deadline HH:MM | `guardrails.py` |
+| Output safety | Dangerous commands, SQL injection, XSS | `guardrails.py` |
+| PII anonymization | Regex: телефоны, email, паспорта, карты, СНИЛС | `security.py` |
+| Tool input validation | Блокировка PII-ключей в аргументах | `security.py` |
+| Rate limiting | 10 вызовов/мин, скользящее окно | `security.py` |
+| Time validation | Прошлое время, пересечения, end <= start, ночной запрет | `planner.py` |
+| Loop protection | max 25 итераций + recursion_limit 150 | `config.py` |
+| LLM required | Без API ключа агент не запускается | `planner.py` |
 
----
+## Инструменты агента
 
-## Архитектура PoC
+| Инструмент | Параметры | Что делает |
+|---|---|---|
+| `get_current_time` | — | Текущие дата и время |
+| `get_date` | offset_days | Дата со смещением (0=сегодня, 1=завтра) |
+| `get_events` | date (YYYY-MM-DD) | События календаря на дату |
+| `validate_schedule` | plan, date | Проверка: прошлое, пересечения, end <= start |
+| `create_event` | date, task_name, start_time, end_time | Создание события с проверкой конфликтов |
 
-Система включает несколько модулей:
+## Метрики
 
-- LLM Planner Agent
-- Calendar API integration
-- Task Manager Tool
-- Schedule Optimizer
-- Memory module
-- Monitoring & logging
+| Метрика | Описание |
+|---|---|
+| total_runs / success_rate | Всего запусков и доля успешных |
+| task_placement_rate | Доля размещённых задач |
+| e2e_latency (avg/p50/p95) | Полное время выполнения |
+| time_to_first_token (avg/p95) | Задержка до первого токена |
+| time_per_output_token (avg/p95) | Время на выходной токен |
+| total_input_tokens / total_output_tokens | Токены LLM |
+| total_cost_usd | Стоимость вызовов LLM |
+| guardrail_rejections | Отклонённые запросы |
+| tool_call_counts | Вызовы каждого инструмента |
+| error_counts | Типы ошибок |
 
----
+## Мониторинг
 
-## Основные технологии
+| Сервис | URL | Описание |
+|---|---|---|
+| Agent API | http://localhost:8000 | FastAPI сервер |
+| Prometheus | http://localhost:9090 | Сбор метрик (scrape /metrics каждые 10с) |
+| Grafana | http://localhost:3000 (admin/admin) | Визуализация (16 панелей) |
+| Langfuse | https://us.cloud.langfuse.com | Трейсинг вызовов LLM |
 
-- Python
-- LLM API
-- LangChain / Agents framework
-- Vector database
-- Google Calendar API (или mock API)
+```bash
+docker-compose up -d
+```
+
+## Конфигурация
+
+Файл `.env`:
+
+```
+OPENAI_API_KEY=sk-...
+OPENAI_URL=https://litellm.tokengate.ru/v1
+OPENAI_MODEL=openai/gpt-4o
+LANGFUSE_HOST=https://us.cloud.langfuse.com
+LANGFUSE_PUBLIC_KEY=pk-lf-...
+LANGFUSE_SECRET_KEY=sk-lf-...
+```
+
+## Evals
+
+Оценка каждого плана по 4 метрикам:
+
+| Метрика | Вес | Что измеряет |
+|---|---|---|
+| task_placement_rate | 0.35 | Доля размещённых задач |
+| no_overlaps | 0.30 | Отсутствие пересечений |
+| deadline_respect | 0.25 | Соблюдение дедлайнов |
+| time_efficiency | 0.10 | Плотность расписания |
+| **overall_score** | — | Взвешенная сумма |
+
+## API Endpoints
+
+| Endpoint | Описание |
+|---|---|
+| `POST /api/chat` | Текстовый запрос → распознавание → план |
+| `POST /api/plan` | Структурированные задачи → план |
+| `GET /api/metrics` | Метрики (JSON) |
+| `GET /metrics` | Метрики (Prometheus text) |
+| `GET /` | Статус и список endpoint'ов |
+
+## Безопасность
+
+- PII анонимизируется перед отправкой в LLM
+- Входные данные валидируются через Pydantic + injection check
+- Rate limiting на вызовы инструментов
+- Валидация времени и пересечений до создания событий
+- Запрет на ночное время (00:00-07:00)
+- Guardrail rejection логируется
+
+## Ограничения PoC
+
+- Планирование на день/несколько дней
+- Один календарь (Google Calendar)
+- Без долгосрочной истории предпочтений
+- Без интеграции с таск-менеджерами

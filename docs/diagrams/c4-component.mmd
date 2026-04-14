@@ -1,20 +1,24 @@
 C4Component
-    title C4 Component: Внутреннее устройство Agent Orchestrator
+    title C4 Component: Внутреннее устройство Agent Core
 
-    Container_Boundary(orchestrator, "Agent Orchestrator") {
-        Component(graph, "State Graph", "LangGraph", "Маршрутизация узлов: LLM -> Tools -> Валидатор")
-        Component(llm_gateway, "LLM Gateway", "LangChain", "Абстракция над моделями, Circuit Breaker, Fallbacks")
-        Component(memory_mgr, "Memory Manager", "Python", "Контроль Context Budget (токены), суммаризация")
-        Component(prompt_builder, "Context Builder", "Python", "Инъекция даты, времени, правил из RAG")
-        Component(validator, "Guardrail Validator", "Pydantic", "Проверка логики расписания (пересечения времени)")
+    Container_Boundary(agent, "Agent Core") {
+        Component(graph, "State Graph", "LangGraph", "Цикл think -> execute -> think")
+        Component(llm_node, "llm_think", "OpenAI Function Calling", "Генерация tool_calls на основе контекста")
+        Component(tool_node, "tool_execute", "Python", "Вызов инструментов, rate limiting, валидация")
+        Component(prompt, "System Prompt", "Шаблон", "Инструкции, suggested_start, ночной запрет")
+        Component(validator, "validate_schedule", "Python", "Проверка плана: прошлое, пересечения")
     }
 
-    ComponentDb(redis, "Redis", "Стейт")
-    ComponentDb(llm, "External LLM", "API")
+    Component(nlp, "NLP Parser", "LLM", "Извлечение задач из текста с suggested_start")
+    Component(guardrails, "Guardrails", "Python", "Injection check, Pydantic, output safety")
+    ComponentDb(calendar, "Google Calendar", "Внешний API")
+    ComponentDb(llm, "LLM API", "LiteLLM прокси")
 
-    Rel(graph, llm_gateway, "Отправляет сгенерированный контекст")
-    Rel(llm_gateway, llm, "API Call")
-    Rel(graph, memory_mgr, "Запрашивает историю")
-    Rel(memory_mgr, redis, "Загружает сообщения")
-    Rel(graph, prompt_builder, "Сборка системного промпта")
-    Rel(graph, validator, "Валидация перед финальным ответом")
+    Rel(nlp, graph, "Структурированные задачи")
+    Rel(graph, llm_node, "Передача messages + system prompt")
+    Rel(llm_node, llm, "chat.completions.create(tools=...)")
+    Rel(graph, tool_node, "Передача tool_calls")
+    Rel(tool_node, validator, "validate_schedule для проверки плана")
+    Rel(tool_node, calendar, "get_events, create_event")
+    Rel(graph, prompt, "SYSTEM_PROMPT.format(tasks)")
+    Rel(graph, guardrails, "Проверка перед запуском")

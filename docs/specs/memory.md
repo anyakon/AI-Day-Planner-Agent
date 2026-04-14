@@ -1,7 +1,33 @@
 # Memory & Context
 
-- **Session State:** Хранится в Redis. Формат: list of messages (HumanMessage, AIMessage, ToolMessage).
-- **Context Budgeting:**
-  - Максимальный размер окна: 16,000 токенов (запас для GPT-4o-mini).
-  - Если история превышает 10,000 токенов, запускается фоновый процесс LLM-суммаризации старых сообщений (до последних 5 ходов).
-- **System Prompt Dynamics:** Всегда включает текущее время (ISO) и timezone пользователя. Это критично для агентов-планировщиков, иначе они планируют встречи в прошлом.
+## Session State
+
+Хранится в AgentState (LangGraph). Формат: list of messages (role, content, tool_calls).
+
+## Долгосрочная память
+
+Файл memory.json — сохранённые предпочтения пользователя.
+
+Инструменты:
+- save_preference(key, value) — записать
+- get_preferences() — прочитать
+
+## Контекст для LLM
+
+System prompt включает:
+- описание инструментов
+- порядок действий
+- правила (suggested_start, ночной запрет)
+- задачи пользователя (анонимизированные)
+
+## NLP Context
+
+NLP парсер добавляет к каждой задаче:
+- suggested_start: рекомендуемое время начала
+- preferred_time: утро/день/вечер/любое
+
+## Context Budgeting
+
+- max_tokens=2000 на ответ LLM
+- temperature=0.3 для детерминированности
+- Полная история сообщений передаётся в каждом вызове

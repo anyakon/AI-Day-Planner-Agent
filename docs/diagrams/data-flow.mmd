@@ -1,34 +1,45 @@
 flowchart TD
-    title Data Flow Diagram: Движение данных и хранение
+    title Data Flow: Движение данных в AI Day Planner Agent
 
-    User([Пользователь]) -->|Текстовый запрос| Gateway[API Gateway]
-    Gateway -->|Сырой текст + Meta| Graph[Agent Graph]
+    User([Пользователь]) -->|Текст или JSON| Server[FastAPI Server]
 
-    subgraph Memory Storage
-        Redis[(Redis: Session State)]
-        VDB[(Vector DB: Preferences)]
+    User -->|POST /api/chat| ChatEndpoint[POST /api/chat]
+    User -->|POST /api/plan| PlanEndpoint[POST /api/plan]
+
+    ChatEndpoint --> Guard[Guardrail Check]
+    PlanEndpoint --> Guard
+
+    Guard -->|injection?| Reject[Reject: 500]
+    Guard -->|OK| NLP[NLP Parser: extract_tasks]
+    PlanEndpoint --> Anonymizer[Анонимизация PII]
+    NLP --> Anonymizer
+
+    Anonymizer -->|Очищенные задачи| Agent[Agent Core]
+
+    subgraph ReAct цикл
+        Agent -->|think: system prompt + tasks| LLM[LLM Function Calling]
+        LLM -->|tool_calls| ToolExec[tool_execute]
+
+        ToolExec -->|get_current_time| TimeResult[Текущее время]
+        ToolExec -->|get_date(offset)| DateResult[Дата]
+        ToolExec -->|get_events(date)| CalRead[Чтение календаря]
+        ToolExec -->|validate_schedule(plan)| ValidationResult[Валидация плана]
+        ToolExec -->|create_event(...)| CalWrite[Создание события]
+
+        TimeResult --> LLM
+        DateResult --> LLM
+        CalRead --> LLM
+        ValidationResult --> LLM
+        CalWrite --> LLM
     end
 
-    Graph <-->|ID сессии -> Чтение/Запись истории| Redis
-    Graph -->|Векторизация запроса| VDB
-    VDB -->|Top-K привычек| Graph
+    Agent -->|План завершён| Evals[Evaluate Quality]
+    Evals -->|quality_score| Metrics[MetricsCollector]
+    Agent -->|Трейс| Langfuse[(Langfuse Cloud)]
+    Metrics -->|Сохранение| MetricsFile[metrics.json]
 
-    subgraph External
-        LLM[LLM API]
-        Cal[Calendar API]
-    end
+    Prometheus[Prometheus] -->|scrape /metrics каждые 10с| Server
+    Grafana[(Grafana)] -->|запрос метрик| Prometheus
 
-    Graph -->|Собранный промпт\n(User + History + RAG)| LLM
-    LLM -->|Tool Arguments / JSON| Graph
-    
-    Graph -->|Валидированные аргументы| Cal
-    Cal -->|Свободные слоты / Статусы| Graph
-
-    subgraph Observability
-        Logger[Telemetry / Logs]
-    end
-
-    Graph -.->|Токены, Latency, Ошибки| Logger
-    Gateway -.->|Request/Response| Logger
-
-    Graph -->|Финальный текст + Ссылки| User
+    Agent -->|Результат| Server
+    Server -->|JSON с планом и метриками| User

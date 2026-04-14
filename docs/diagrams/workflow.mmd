@@ -1,21 +1,49 @@
 stateDiagram-v2
-    title Workflow выполнения запроса (Agentic State Graph)
-    
-    [*] --> Receive_Request
-    Receive_Request --> Load_Context: Извлечение UserID
-    Load_Context --> Prompt_Enrichment: Добавление времени и RAG
-    Prompt_Enrichment --> LLM_Reasoning
-    
-    LLM_Reasoning --> Tool_Call: Агент решил использовать API
-    LLM_Reasoning --> Validation_Guardrail: Агент составил план
-    
-    Tool_Call --> Execute_Tool
-    Execute_Tool --> LLM_Reasoning: Возврат данных (Success)
-    Execute_Tool --> Fallback_Error: Ошибка API (Timeout/Limits)
-    
-    Fallback_Error --> LLM_Reasoning: Текст ошибки в контекст (Self-Correction)
-    
-    Validation_Guardrail --> Final_Answer: План валиден (нет накладок)
-    Validation_Guardrail --> LLM_Reasoning: Найдена алгоритмическая ошибка времени
-    
-    Final_Answer --> [*]: Отправка пользователю
+    title Workflow: ReAct цикл агента планирования
+
+    [*] --> Receive_Input: POST /api/chat или /api/plan
+
+    Receive_Input --> Guardrail_Check: validation + injection check
+
+    Guardrail_Check --> Reject: injection detected
+    Guardrail_Check --> NLP_Parse: текстовый запрос
+    Guardrail_Check --> Anonymize: структурированные задачи
+
+    NLP_Parse --> Anonymize: extract_tasks_from_text()
+
+    Anonymize --> Init_State: Анонимизированные задачи + suggested_start
+
+    state ReAct_Cycle {
+        [*] --> think
+        think --> execute: LLM вернул tool_calls
+        think --> [*]: LLM ответил текстом
+
+        execute --> think: Итерация < 25
+        execute --> [*]: Итерация >= 25 или все задачи размещены
+
+        note right of think
+            LLM решает:
+            - get_current_time
+            - get_date
+            - get_events
+            - validate_schedule
+            - create_event
+        end note
+
+        note right of execute
+            Выполнение инструментов:
+            - Rate limit check
+            - Security validation
+            - Tool execution
+            - Update state
+        end note
+    }
+
+    Reject --> [*]: Error 500
+
+    Init_State --> ReAct_Cycle
+    ReAct_Cycle --> Evaluate: Цикл завершён
+    Evaluate --> Save_Metrics: quality_score, latency, tokens, cost
+    Save_Metrics --> Langfuse_Trace: optional
+    Langfuse_Trace --> Return_Plan: metrics.json + langfuse
+    Return_Plan --> [*]: JSON ответ
