@@ -6,12 +6,6 @@
 
 Агент для автоматического планирования задач в календаре пользователя. Принимает текстовый запрос (например "Завтра утром теннис, после обеда код-ревью"), распознаёт задачи, проверяет занятые слоты, составляет расписание без пересечений и создаёт события.
 
-**Метрики успеха:**
-- task_placement_rate >= 90% задач размещено
-- success_rate >= 90% успешных запусков
-- avg_plan_quality >= 0.7 по шкале evals
-- response_time < 60 секунд (текстовый запрос)
-
 ## Операционные ограничения
 
 - События нельзя создавать в прошлом
@@ -20,18 +14,18 @@
 - Максимум 25 итераций ReAct-цикла
 - Запрет на ночное время (00:00-07:00)
 
-## Быстрый старт
+## Запуск
 
 ```bash
 pip install -r requirements.txt
 python server.py
 ```
 
-Откройте http://localhost:8000
+http://localhost:8000
 
 ## Способы взаимодействия
 
-### 1. Текстовый запрос (NLP)
+### 1. Текстовый запрос (обработка NLP через агента)
 
 ```bash
 curl -X POST http://localhost:8000/api/chat \
@@ -49,13 +43,6 @@ curl -X POST http://localhost:8000/api/plan \
   -d '{"tasks":[{"name":"Теннис","duration":60,"deadline":"23:59"}]}'
 ```
 
-### 3. Проверка статуса
-
-```bash
-curl http://localhost:8000/
-```
-
-Вернёт статус и список доступных endpoint'ов.
 
 ## Архитектура
 
@@ -109,7 +96,7 @@ curl http://localhost:8000/
 
 ## Guardrails
 
-| Тип | Механизм | Где |
+| Тип | Механизм | Где реализовано |
 |---|---|---|
 | Prompt injection | 10 regex паттернов + Pydantic | `guardrails.py` |
 | Input validation | Pydantic: name max 200, duration > 0 <= 1440, deadline HH:MM | `guardrails.py` |
@@ -171,28 +158,6 @@ LANGFUSE_HOST=https://us.cloud.langfuse.com
 LANGFUSE_PUBLIC_KEY=pk-lf-...
 LANGFUSE_SECRET_KEY=sk-lf-...
 ```
-
-## Evals
-
-Оценка каждого плана по 4 метрикам:
-
-| Метрика | Вес | Что измеряет |
-|---|---|---|
-| task_placement_rate | 0.35 | Доля размещённых задач |
-| no_overlaps | 0.30 | Отсутствие пересечений |
-| deadline_respect | 0.25 | Соблюдение дедлайнов |
-| time_efficiency | 0.10 | Плотность расписания |
-| **overall_score** | — | Взвешенная сумма |
-
-## API Endpoints
-
-| Endpoint | Описание |
-|---|---|
-| `POST /api/chat` | Текстовый запрос → распознавание → план |
-| `POST /api/plan` | Структурированные задачи → план |
-| `GET /api/metrics` | Метрики (JSON) |
-| `GET /metrics` | Метрики (Prometheus text) |
-| `GET /` | Статус и список endpoint'ов |
 
 ## Безопасность
 
